@@ -1,0 +1,298 @@
+#+TITLE:      Docker and Kubernete
+#+AUTHOR:     Ali Ebadian
+#+EMAIL:      
+
+#+OPTIONS:    H:3 num:nil toc:t \n:nil @:t ::t |:t ^:t -:t f:t *:t TeX:t LaTeX:t skip:nil d:(HIDE) tags:not-in-toc
+#+options: ':nil *:t -:t ::t <:t H:3 \n:nil ^:t arch:headline author:t
+#+options: broken-links:nil c:nil creator:nil d:(not "LOGBOOK") date:t e:t
+#+options: email:nil f:t inline:t num:t p:nil pri:nil prop:nil stat:t tags:t
+#+options: tasks:t tex:t timestamp:t title:t toc:t todo:t |:t
+
+#+select_tags: export
+#+exclude_tags: noexport
+
+
+
+#+STARTUP:    align fold nodlcheck hidestars oddeven lognotestate
+#+SEQ_TODO:   TODO(t) INPROGRESS(i) WAITING(w@) | DONE(d) CANCELED(c@)
+#+TAGS:       Write(w) Update(u) Fix(f) Check(c)
+#+LANGUAGE:   en
+#+PRIORITIES: A C B
+#+CATEGORY:   code
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="http://thomasf.github.io/solarized-css/solarized-light.min.css" />
+
+# This file is the default header for new Org files in Worg.  Feel free
+# to tailor it to your needs.
+
+
+
+* Terraform                                                       :terraform:
+** OLD WAY
+#+begin_src 
+rm -rf .terraform && terraform init -backend-config="key=nonprod-1/east/terraform.tfstate" -var profile=saml2aws
+terraform plan -var instance=1 -var bastion_user=admin -target=module.logging
+terraform apply -var environment=prod -var bastion_user=admin -target=module.logging
+#+end_src
+** TODO NEW WAY                                                    :makefile:
+* Python 
+** intall (MacOS)
+   Leave the system version of OS alone and intall the python using ~pyenv~. It should take care of everything.
+   #+begin_src bash
+     brew install pyenv
+     pyenv install <version>
+     pyenv global <version>
+   #+end_src
+
+Add the  the following to ~/.zshrc~ or ~/.bash_profile~ depending on what you're using.
+#+begin_src bash
+   #Python
+if command -v pyenv 1>/dev/null 2>&1; then
+  eval "$(pyenv init -)"
+fi
+#+end_src
+** Code
+*** __init__
+    This is the constructor. 
+
+* Linux
+** TOP
+*** Order by RAM usage 
+    ~f~ then select ~%MEM~
+    #+begin_src 
+    29605 root      20   0  386252  66528      4 D  0.0  3.3   0:00.51 /usr/bin/python2 -s /usr/bin/aws s3 cp /home/ec2-user/geoip/GeoIP2 City/GeoIP2-City-Blocks-IPv4.csv s3://applic+
+ 1875 root      20   0  386252  66524      4 D  0.0  3.3   0:00.72 /usr/bin/python2 -s /usr/bin/aws s3 cp /home/ec2-user/geoip/GeoIP2 City/GeoIP2-City.mmdb s3://application-proce+
+32342 root      20   0  386248  66524      4 D  0.0  3.3   0:00.75 /usr/bin/python2 -s /usr/bin/aws s3 cp /home/ec2-user/geoip/GeoIP2 City/GeoIP2-City.mmdb s3://application-proce+
+ 8013 root      20   0  386248  66520      4 D  0.0  3.3   0:00.84 /usr/bin/python2 -s /usr/bin/aws s3 cp /home/ec2-user/geoip/GeoIP2 City/GeoIP2-City.mmdb s3://application-proce+
+21472 root      20   0  386248  66512      4 D  0.0  3.3   0:00.85 /usr/bin/python2 -s /usr/bin/aws s3 cp /home/ec2-user/geoip/GeoIP2 City/GeoIP2-City.mmdb s3://application-proce+
+    #+end_src
+    The ~D~ state indicates that these processes are stuck waiting data.
+** ZSH and aliases
+*** ZSH function for SAML2AWS
+#+begin_src 
+function prof() {
+  unset role
+  case $1 in
+    nonprod)
+      role='arn:aws:iam::758317246284:role/ADFS-Developer'
+      ;;
+    prod)
+      role='arn:aws:iam::086397520578:role/ADFS-Developer'
+      ;;
+  esac
+  if [[ -n $role ]]
+  then
+    saml2aws login --skip-prompt --role=$role --profile=$1 --session-duration 14400
+    export AWS_PROFILE=$1
+    export AWS_DEFAULT_REGION='us-east-1'
+  fi
+
+  printenv | grep -i ^aws
+}
+
+#+end_src
+*** None new line returns                                             :token:
+    zsh adds ~%\n~ when commands like curl don't return with new line. You'd see ~%~ at the end of the ruturned string. Have to remember this when dealing with tokens.
+
+** Bash Commands
+*** Get base64 of a string
+    #+begin_src bash
+     echo -n 'svc-webanalytics:AKCp5ek8CdUn5rxr8EG3Gi1UKi7E9Jtj56KcykrjnMWetgwayvhFLKJVa2F4kyneEh1ahT12v' | base64
+    #+end_src
+    The ~-n~ tells echo not to add a new like at the end.
+* SQL
+** Redshift
+*** User and groups
+**** Add users
+#+begin_src sql 
+-- Getting all users
+ select * from pg_user_info;
+--Create new user with password (option: allow createdb and limit number of connections)
+ create user sistum with password 'U45f5uQHCEHvhETm' createdb connection limit 10;
+
+--List all users and what groups they blong to
+ SELECT usename, groname 
+ FROM pg_user, pg_group
+ WHERE pg_user.usesysid = ANY(pg_group.grolist)
+ AND pg_group.groname in (SELECT DISTINCT pg_group.groname from pg_group);
+
+--Add a user to a group
+ alter group e2e_users
+ add user sistum;
+
+
+#+end_src
+* Kubernetes
+** Init containers
+These are containers compe up just before the main container starting. they can be used to setup environment.
+Here is an example that was used to bebug secerets inject:
+#+BEGIN_SRC yaml
+        spec:
+    {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      serviceAccountName: {{ include "helm.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          env:
+            - name: POSTGRES_URL
+              value: {{.Values.app.postgresUrl}}
+            - name: REDSHIFT_URL
+              value: {{.Values.app.redshiftUrl}}
+            - name:  env
+              value: {{.Values.app.env}}
+            - name: spring_profiles_active
+              value:  {{.Values.app.springProfile}}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.app.healthCheckUrl }}
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 60
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      initContainers:
+        - name: init-environment
+          image: busybox
+          command: ["/bin/sh","-c"]
+          args:
+            - echo $POSTGRES_PASSWORD
+            - echo $REDSHIFT_PASSWORD
+
+#+END_SRC
+* MacOs
+** Brew
+*** upgrade
+#+BEGIN_SRC bash
+brew upgrade
+#+END_SRC
+If this asks for password rpeatedly. run ~sudo visudo~ and set ~Defaults timestamp_timeout=~ to 5. This makes sure to ask for passowrd every 5 mins.
+
+* AWS :aws:
+** Secret Manager
+   Create a new secret manager:
+   First you have  Create a config.json file in the following format:
+   #+begin_src json
+    {
+      "auths": {
+        "<DOCKER REPO>": {
+          "auth": "<BASE64 ENCODED username:password>"
+        }
+      }
+    }
+
+   #+end_src
+   
+  #+begin_src bash
+    aws --profile nonprod secretsmanager create-secret --name usage-artifactory-realease-repo --secret-string "$(cat config.json | base64)"
+   #+end_src
+
+  Put a secret value:
+  #+begin_src bash
+    aws secretsmanager put-secret-value --secret-id <SECRET ARN>    --secret-string <STRING SECRET> 
+  #+end_src
+  Put secret as file (Better option):
+ #+begin_src bash
+   aws secretsmanager put-secret-value --secret-id arn:aws:secretsmanager:us-east-1:758317246284:secret:usage-artifactory-docker-auth-xpXpKP --secret-binary fileb://config.json
+ #+end_src
+ Get  secret from as file
+ #+BEGIN_SRC bash
+   aws secretsmanager get-secret-value --secret-id <SECRET ARN> --query SecretBinary --output text | base64 --decode >> usage-util-prod.pem
+ #+END_SRC
+
+*** Get secerets from jenkins file                                  :jenkins:
+    Add the following step the top of ~stages~
+ #+begin_src groovy
+           stage('Init') {
+            steps {
+                script {
+                    withCredentials([string(credentialsId: 'usage-artifactory-docker-creds', variable: 'artif_auths')]) {
+                       sh '''
+                          mkdir -p -m 755 "$HOME/.docker"
+                          printf %s "$artif_auths" | base64 --decode > "$HOME/.docker/config.json"
+                       '''
+                    }
+                }
+            }
+        }
+ #+end_src
+** EKS :kubernetes:
+Get context from AWS
+#+begin_src bash
+aws eks --region us-east-1 update-kubeconfig --name epic-eks-prod --profile epicprod
+#+end_src
+
+sometimes we might need to rename the context.
+#+begin_src bash
+kubectl config rename-context <cluster ARN> <New name>
+
+#+end_src
+
+* Docker                                 :aws:makefile:docker:secretsmanager:
+** Repo config
+This is what the docker make file should have to download authentication in ~.docker~ file.
+#+begin_src make
+build: config
+
+config: CONFIG = $(call get_secret,usage-artifactory-docker-creds)
+config:
+	@printf '%s' '$(CONFIG)' | base64 --decode > config.json
+#+end_src
+*** Add docker auth to ~.docker~
+#+begin_src bash
+ aws secretsmanager get-secret-value --secret-id <secrets ARN> --query SecretBinary --output text | base64 -D >> conf.json
+#+end_src
+** Tag and push
+#+begin_src shell
+docker tag counter-data-service docker-dp-analytics-usage-snapshots-virtual.rt.artifactory.tio.systems/counter-data-service:0.2.52
+docker push docker-dp-analytics-usage-snapshots-virtual.rt.artifactory.tio.systems/counter-data-service:0.2.52
+#+end_src
+
+
+** Runing an image
+Run an image that's on the repo
+#+begin_src shell
+docker run --rm -p 8888:8080 docker-dp-analytics-usage-snapshots-virtual.rt.artifactory.tio.systems/counter-data-service:0.2.47
+
+#+end_src
+
+Run interactivly local image
+#+begin_src bash
+docker run -it counter-data-service:latest
+#+end_src
+
+** SSH to running local image
+#+begin_src shell
+docker exec -it b71133dc40a8  bash
+docker exec -it 524e40b0fe30  sh
+#+end_src
+
+
+* Git
+** Removing all tags on local and on remote
+1 - Delete all local tags (Optional Recomended)
+#+BEGIN_SRC
+git tag -d $(git tag -l)
+#+END_SRC
+2 - Fetch remote All tags (Optional Recomeded)
+#+BEGIN_SRC
+git fetch
+#+END_SRC
+3 - Delete All remote tags
+#+BEGIN_SRC
+git push origin --delete $(git tag -l) # Pushing once should be faster than multiple times
+#+END_SRC
+4 - Delete local tags
+#+BEGIN_SRC
+git tag -d $(git tag -l)
+#+END_SRC
